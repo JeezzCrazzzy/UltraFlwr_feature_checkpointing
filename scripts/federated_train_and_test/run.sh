@@ -1,61 +1,77 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # navigate to directory
 SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
 cd $SCRIPTPATH
-
 cd ../../
 
-# Default values for arguments
-SERVER_SCRIPT="FedYOLO/train/yolo_server.py"
-CLIENT_SCRIPT="FedYOLO/train/yolo_client.py"
-SERVER_ADDRESS="127.0.0.1:8080"  # Changed to localhost for better connectivity
-
-# Read CLIENT_CONFIG from Python file
-CLIENT_CONFIG_FILE="./FedYOLO/config.py"
-if [[ ! -f "$CLIENT_CONFIG_FILE" ]]; then
-    echo "Error: $CLIENT_CONFIG_FILE not found"
+# Install FedYOLO from setup.py
+if [[ -f "setup.py" ]]; then
+    echo "Installing FedYOLO package..."
+    pip install --no-cache-dir -e .
+else
+    echo "Error: setup.py not found. Cannot install FedYOLO."
     exit 1
 fi
 
-DATASET_NAME=$(python3 -c "from FedYOLO.config import SPLITS_CONFIG; print(SPLITS_CONFIG['dataset_name'])")
-STRATEGY_NAME=$(python3 -c "from FedYOLO.config import SERVER_CONFIG; print(SERVER_CONFIG['strategy'])")
+# Get dataset name and strategy from config
+DATASET_NAME=$(python -c "from FedYOLO.config import SPLITS_CONFIG; print(SPLITS_CONFIG['dataset_name'])")
+STRATEGY_NAME=$(python -c "from FedYOLO.config import SERVER_CONFIG; print(SERVER_CONFIG['strategy'])")
 
-# Function to start the server
-start_server() {
-    # Free port 8080 before starting the server
-    echo "Freeing port 8080..."
-    lsof -t -i:8080 | xargs kill -9 2>/dev/null
-    echo "Starting server..."
-    SERVER_LOG="logs/server_log_${DATASET_NAME}_${STRATEGY_NAME}.txt"
-    python3 "$SERVER_SCRIPT" > "$SERVER_LOG" 2>&1 &
-    SERVER_PID=$!
-    PIDS+=($SERVER_PID)
-    echo "Server started with PID: $SERVER_PID. Logs: $SERVER_LOG"
-}
+# Create logs directory if it doesn't exist
+mkdir -p logs
 
-# Function to start a client with its own config
-start_client() {
-    CLIENT_CID=$1
-    CLIENT_DATA_PATH=$(python3 -c "from FedYOLO.config import CLIENT_CONFIG; print(CLIENT_CONFIG[$CLIENT_CID]['data_path'])")
-    CLIENT_LOG="logs/client_${CLIENT_CID}_log_${DATASET_NAME}_${STRATEGY_NAME}.txt"
-    echo "Starting client $CLIENT_CID with data path: $CLIENT_DATA_PATH..."
-    python3 "$CLIENT_SCRIPT" --cid="$CLIENT_CID" --data_path="$CLIENT_DATA_PATH" > "$CLIENT_LOG" 2>&1 &
-    CLIENT_PID=$!
-    PIDS+=($CLIENT_PID)
-    echo "Client $CLIENT_CID started with PID: $CLIENT_PID. Logs: $CLIENT_LOG"
+# Define script paths
+SERVER_SCRIPT="FedYOLO/train/yolo_server.py"
+CLIENT_SCRIPT="FedYOLO/train/yolo_client.py"
+
+# Define log file paths
+SERVER_LOG="logs/server_log_${DATASET_NAME}_${STRATEGY_NAME}.txt"
+CLIENT_LOG_PREFIX="logs/client"
+
+# Function to check if server is ready
+check_server_ready() {
+    local max_attempts=30
+    local attempt=1
+    
+    echo "Waiting for server to be ready..."
+    while [ $attempt -le $max_attempts ]; do
+        if netstat -an | grep -q ":8080.*LISTEN"; then
+            echo "Server is ready on port 8080"
+            return 0
+        fi
+        echo "Attempt $attempt/$max_attempts: Server not ready yet, waiting..."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    
+    echo "Error: Server failed to start within $((max_attempts * 2)) seconds"
+    return 1
 }
 
 # Start the server
-start_server
+echo "Starting server..."
+python "$SERVER_SCRIPT" > "$SERVER_LOG" 2>&1 &
+SERVER_PID=$!
 
-# Add a short delay to ensure server is up
-sleep 2
+# Wait for server to be ready
+if ! check_server_ready; then
+    echo "Failed to start server. Check server logs: $SERVER_LOG"
+    exit 1
+fi
 
-# Start clients based on CLIENT_CONFIG
-for CLIENT_CID in $(python3 -c "from FedYOLO.config import CLIENT_CONFIG; print(' '.join(map(str, CLIENT_CONFIG.keys())))"); do
-    start_client "$CLIENT_CID"
+# Get number of clients from config
+NUM_CLIENTS=$(python -c "from FedYOLO.config import NUM_CLIENTS; print(NUM_CLIENTS)")
+
+# Start clients
+for CLIENT_CID in $(seq 0 $((NUM_CLIENTS-1))); do
+    echo "Starting client $CLIENT_CID..."
+    CLIENT_DATA_PATH=$(python -c "from FedYOLO.config import CLIENT_CONFIG; print(CLIENT_CONFIG[$CLIENT_CID]['data_path'])")
+    CLIENT_LOG="${CLIENT_LOG_PREFIX}_${CLIENT_CID}_log_${DATASET_NAME}_${STRATEGY_NAME}.txt"
+    python "$CLIENT_SCRIPT" --cid="$CLIENT_CID" --data_path="$CLIENT_DATA_PATH" > "$CLIENT_LOG" 2>&1 &
 done
 
-# Wait for all processes to finish
+# Wait for all processes to complete
 wait
+
+echo "All processes completed."

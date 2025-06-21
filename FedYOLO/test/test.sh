@@ -17,11 +17,11 @@ else
     exit 1
 fi
 
-DATASET_NAME_LIST=($(python3 -c "from FedYOLO.config import SPLITS_CONFIG; print(SPLITS_CONFIG['dataset_name'])"))
-STRATEGY_LIST=($(python3 -c "from FedYOLO.config import SERVER_CONFIG; print(SERVER_CONFIG['strategy'])"))
+DATASET_NAME_LIST=($(python -c "from FedYOLO.config import SPLITS_CONFIG; print(SPLITS_CONFIG['dataset_name'])"))
+STRATEGY_LIST=($(python -c "from FedYOLO.config import SERVER_CONFIG; print(SERVER_CONFIG['strategy'])"))
 
 # Number of clients for client-dependent tests
-NUM_CLIENTS=$(python3 -c "from FedYOLO.config import NUM_CLIENTS; print(NUM_CLIENTS)")
+NUM_CLIENTS=$(python -c "from FedYOLO.config import NUM_CLIENTS; print(NUM_CLIENTS)")
 
 # Define scoring styles
 CLIENT_DEPENDENT_STYLES=("client-client" "client-server" "server-client")
@@ -52,7 +52,7 @@ for DATASET_NAME in "${DATASET_NAME_LIST[@]}"; do
         if ! should_skip_server "$STRATEGY"; then
             for SCORING_STYLE in "${CLIENT_INDEPENDENT_STYLES[@]}"; do
                 echo "Running client-independent test: scoring_style=${SCORING_STYLE}"
-                python3 "$PYTHON_SCRIPT" --dataset_name "$DATASET_NAME" --strategy_name "$STRATEGY" --scoring_style "$SCORING_STYLE"
+                python "$PYTHON_SCRIPT" --dataset_name "$DATASET_NAME" --strategy_name "$STRATEGY" --scoring_style "$SCORING_STYLE"
                 echo ""
             done
         else
@@ -70,7 +70,7 @@ for DATASET_NAME in "${DATASET_NAME_LIST[@]}"; do
                 fi
 
                 echo "Running client-dependent test: client_num=${CLIENT_NUM}, scoring_style=${SCORING_STYLE}"
-                python3 "$PYTHON_SCRIPT" --dataset_name "$DATASET_NAME" --strategy_name "$STRATEGY" --client_num "$CLIENT_NUM" --scoring_style "$SCORING_STYLE"
+                python "$PYTHON_SCRIPT" --dataset_name "$DATASET_NAME" --strategy_name "$STRATEGY" --client_num "$CLIENT_NUM" --scoring_style "$SCORING_STYLE"
                 echo ""
             done
         done

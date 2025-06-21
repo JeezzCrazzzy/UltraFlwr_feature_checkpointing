@@ -2,6 +2,7 @@ import time
 import torch
 from collections import OrderedDict
 from typing import Optional, Union
+import pickle
 
 import flwr as fl
 from flwr.common import parameters_to_ndarrays, FitRes, Parameters, Scalar
@@ -19,6 +20,8 @@ class BaseYOLOSaveStrategy(fl.server.strategy.FedAvg):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.model_path = f"{HOME}/FedYOLO/yolo_configs/yolo11n_{SPLITS_CONFIG['dataset_name']}.yaml"
+        # Dictionary to store client checkpoints: {client_id: parameters}
+        self.client_checkpoints = {}
 
     def initialize_parameters(
         self, client_manager: ClientManager
@@ -108,6 +111,11 @@ class BaseYOLOSaveStrategy(fl.server.strategy.FedAvg):
         aggregated_parameters, aggregated_metrics = super().aggregate_fit(
             server_round, results, failures
         )
+
+        # Store each client's parameters in the checkpoint dictionary
+        for client_proxy, fit_res in results:
+            client_id = client_proxy.cid if hasattr(client_proxy, 'cid') else str(client_proxy)
+            self.client_checkpoints[client_id] = fit_res.parameters
 
         if aggregated_parameters is not None:
             net = self.load_and_update_model(aggregated_parameters)
@@ -202,3 +210,6 @@ class FedBackboneNeckMedian(BaseYOLOSaveStrategy, fl.server.strategy.FedMedian):
     update_backbone = True
     update_neck = True
     update_head = False
+
+# with open("client_checkpoints.pkl", "wb") as f:
+#     pickle.dump(strategy.client_checkpoints, f)

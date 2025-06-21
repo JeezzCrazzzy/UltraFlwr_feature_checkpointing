@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # This script was used to test one model on each data partition of the dataset.
 # as well as the entire dataset.
@@ -10,7 +10,7 @@ cd $SCRIPTPATH
 
 cd ../../
 
-# Install FedYOLO from setup.py, uncomment if already installed
+# Install FedYOLO from setup.py
 if [[ -f "setup.py" ]]; then
     echo "Installing FedYOLO package..."
     pip install --no-cache-dir -e .
@@ -19,27 +19,30 @@ else
     exit 1
 fi
 
-BASE_PATH="$(pwd)"
+# Get dataset name and strategy from config
+DATASET_NAME=$(python -c "from FedYOLO.config import SPLITS_CONFIG; print(SPLITS_CONFIG['dataset_name'])")
+STRATEGY_NAME=$(python -c "from FedYOLO.config import SERVER_CONFIG; print(SERVER_CONFIG['strategy'])")
 
-echo "Base directory: $BASE_PATH"
+# Create logs directory if it doesn't exist
+mkdir -p logs
 
-DATASET_NAME="m2cai16"
-GLOBAL_MODEL_PATH="runs/detect/train51/weights/best.pt"
-DATASET_PATHS=("${BASE_PATH}/datasets/${DATASET_NAME}/partitions/client_0/data.yaml"
-          "${BASE_PATH}/datasets/${DATASET_NAME}/partitions/client_1/data.yaml"
-          "${BASE_PATH}/datasets/${DATASET_NAME}/partitions/client_2/data.yaml"
-          "${BASE_PATH}/datasets/${DATASET_NAME}/data.yaml")
-LOG_DIR="logs_local_train_${DATASET_NAME}"
+# Define log file path
+LOG_FILE="logs/local_eval_log_${DATASET_NAME}_${STRATEGY_NAME}.txt"
 
-mkdir -p "$LOG_DIR"
+# Get dataset path from config
+DATASET_PATH=$(python -c "from FedYOLO.config import DATASET_PATH; print(DATASET_PATH)")
 
-for DATASET_PATH in "${DATASET_PATHS[@]}"; do
-    LOG_FILE="$LOG_DIR/test_$(echo "$DATASET_PATH" | sed 's|/|_|g').log"
+# Define global model path (you may need to adjust this based on your setup)
+GLOBAL_MODEL_PATH="weights/global_model.pt"
 
-    echo "Starting training on $DATASET_PATH..."
-    python3 scripts/central_train_and_test/local_test_only.py --data "$DATASET_PATH" --model "$GLOBAL_MODEL_PATH" | tee "$LOG_FILE"
-    echo "Finished training on $DATASET_PATH."
-    echo "---------------------------------------"
-done
+echo "Starting local evaluation..."
+echo "Dataset: $DATASET_NAME"
+echo "Strategy: $STRATEGY_NAME"
+echo "Dataset path: $DATASET_PATH"
+echo "Global model path: $GLOBAL_MODEL_PATH"
+echo "Log file: $LOG_FILE"
 
-echo "All trainings completed."
+# Run the local evaluation script
+python scripts/central_train_and_test/local_test_only.py --data "$DATASET_PATH" --model "$GLOBAL_MODEL_PATH" | tee "$LOG_FILE"
+
+echo "Local evaluation completed."

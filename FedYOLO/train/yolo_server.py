@@ -93,6 +93,14 @@ def main() -> None:
         config=fl.server.ServerConfig(num_rounds=SERVER_CONFIG["rounds"]),
         strategy=strategy,
     )
+    
+    # After training is complete, save the client checkpoints
+    import pickle
+    checkpoint_file = f"{HOME}/client_checkpoints_{SPLITS_CONFIG['dataset_name']}_{strategy_name}.pkl"
+    with open(checkpoint_file, "wb") as f:
+        pickle.dump(strategy.client_checkpoints, f)
+    print(f"Client checkpoints saved to: {checkpoint_file}")
+    print(f"Number of client checkpoints: {len(strategy.client_checkpoints)}")
 
 
 if __name__ == "__main__":
